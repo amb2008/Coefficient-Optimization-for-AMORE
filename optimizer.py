@@ -17,7 +17,9 @@ import csv
 import pandas as pd
 import random
 
-def anti_community_gd(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, copy_prod):
+# this optimizer has min max for coeffs and conservartion constraints x+y+z
+
+def anti_community_gd(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, prod_list_n_r, copy_prod, min_coeffs, max_coeffs, conservation_constraints):
   """### 5. Gradient Descent with Adam"""
   print()
   print("Beginning anti-community clustering gradient descent")
@@ -54,6 +56,33 @@ def anti_community_gd(iterations, learning_rate, beta1, beta2, individual_coeffs
 
   tick = time.time()
   new_prod_coeffs = copy_prod()
+  if min_coeffs == 1:
+    min_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      min_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        min_coeffs[i].append(new_prod_coeffs[i][j]/2)
+  if max_coeffs == 1:
+    max_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      max_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        max_coeffs[i].append(new_prod_coeffs[i][j]*1.5)
+  if min_coeffs == 0:
+    min_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      min_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        min_coeffs[i].append(-10000000000000000000000000000)
+  if max_coeffs == 0:
+    max_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      max_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        max_coeffs[i].append(10000000000000000000000000000)
+  
+
+  
   history = []
 
   values_to_change = individual_coeffs  # value 1260 was found to have the most effect, and value 1102 was found to have the most effect out of any value that shared coeff yield changes with value 1260
@@ -115,6 +144,52 @@ def anti_community_gd(iterations, learning_rate, beta1, beta2, individual_coeffs
       for k in individual_coeff_map[i][j]:
         score += abs(initial_flat_score_matrix[k])
       individual_coeff_score[i].append(score)
+
+  reliers = []
+  for key in list(conservation_constraints.keys()):
+    # find indices of molecules for groups constraints in prod list
+    for i in range(len(conservation_constraints[key]['constraints'])):
+      for j in range(len(conservation_constraints[key]['constraints'][i][0])):
+        relieri = -1
+        molecule = conservation_constraints[key]['constraints'][i][0][j]
+        for k in range(len(conservation_constraints[key]['constraints'][i][2])):
+          if molecule == conservation_constraints[key]['constraints'][i][2][k]:
+            relieri = k
+        found = False
+        for k in range(len(prod_list_n_r[key-1])):
+          if molecule == prod_list_n_r[key-1][k]:
+            conservation_constraints[key]['constraints'][i][0][j] = [key-1, k]
+            found = True
+        if not found:
+          print(molecule, "was not found in reaction", key)
+        if relieri > -1:
+           conservation_constraints[key]['constraints'][i][2][relieri] = conservation_constraints[key]['constraints'][i][0][j]
+           reliers.append(conservation_constraints[key]['constraints'][i][0][j])
+    # find indices of molecules for ranges in prod list
+    for i in range(len(conservation_constraints[key]['prod_ranges'])):
+      molecule = conservation_constraints[key]['prod_ranges'][i][0]
+      lower = conservation_constraints[key]['prod_ranges'][i][1]
+      upper = conservation_constraints[key]['prod_ranges'][i][2]
+      found = False
+      for k in range(len(prod_list_n_r[key-1])):
+        if molecule == prod_list_n_r[key-1][k]:
+          conservation_constraints[key]['prod_ranges'][i][0] = [key-1, k]
+          found = True
+      molecule = conservation_constraints[key]['prod_ranges'][i][0]
+      if found and isinstance(lower, str):
+        if '%' in lower:
+          percentage = float(lower.strip('%'))/100
+          og_num = new_prod_coeffs[molecule[0]][molecule[1]]
+          conservation_constraints[key]['prod_ranges'][i][1] = percentage*og_num
+        if '%' in upper:
+          percentage = float(upper.strip('%'))/100
+          og_num = new_prod_coeffs[molecule[0]][molecule[1]]
+          conservation_constraints[key]['prod_ranges'][i][2] = percentage*og_num
+          
+      if not found:
+        print(molecule, "was not found in reaction", key)
+
+  print(conservation_constraints)
 
   for x in range(iterations):
       # for h in range(5):
@@ -188,12 +263,59 @@ def anti_community_gd(iterations, learning_rate, beta1, beta2, individual_coeffs
           individual_coeff_score[h][i] = score
           initial_coefficients[h][i] = new_coeffs[i]
 
-          if initial_coefficients[h][i] < 0:
-            initial_coefficients[h][i] = 0
+          boundary_found = False
+          for key in list(conservation_constraints.keys()):
+            for group in conservation_constraints[key]['prod_ranges']:
+              molecule = group[0]
+              if molecule == [map[values_to_change[i]][0],map[values_to_change[i]][1]]:
+                boundary_found = True
+                if initial_coefficients[h][i]<group[1]:
+                  initial_coefficients[h][i]=group[1]
+                elif initial_coefficients[h][i]>group[2]:
+                  initial_coefficients[h][i]=group[2]
+                      
+          if not boundary_found:
+            if initial_coefficients[h][i] < 0:
+              initial_coefficients[h][i] = 0
+            if initial_coefficients[h][i]<min_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]:
+              initial_coefficients[h][i]=min_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]
+            if initial_coefficients[h][i]>max_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]:
+              initial_coefficients[h][i]=max_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]
 
+          new_prod_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]] = initial_coefficients[h][i]
+
+          for key in list(conservation_constraints.keys()):
+            for group in conservation_constraints[key]['constraints']:
+              relier = group[2][0]
+              if relier[0] == [map[values_to_change[i]][0],map[values_to_change[i]][1]]:
+                other_sum = 0
+                for coeff in group[0]:
+                  if coeff != relier:
+                    other_sum += new_prod_coeffs[coeff[0]][coeff[1]]
+                relier_val = group[1]-other_sum
+                new_prod_coeffs[relier[0]][relier[1]] = relier_val
+                initial_coefficients[h][i] = relier_val
+
+      # set all coefficients to their updated values
       for h in range(len(initial_coefficients)):
         for i in range(len(initial_coefficients[h])):
             new_prod_coeffs[map[individual_coeffs[h][i]][0]][map[individual_coeffs[h][i]][1]] = initial_coefficients[h][i]
+
+      # check for the ones that need to be summed up correctly
+      # update coefficients that needed to be a specific value in order to satisfy sums 
+
+      for key in list(conservation_constraints.keys()):
+        for group in conservation_constraints[key]['constraints']:
+          # change [0] later to loop through all reliers
+          relier = group[2][0]
+          if relier != 0:
+            other_sum = 0
+            for coeff in group[0]:
+              if coeff != relier:
+                other_sum += new_prod_coeffs[coeff[0]][coeff[1]]
+            relier_val = group[1]-other_sum
+            new_prod_coeffs[relier[0]][relier[1]] = relier_val
+          print("group", group, "other_sum", other_sum, "relier_val", relier_val)
 
       avg_score, score_matrix = evaluate(new_prod_coeffs)
 
@@ -209,6 +331,7 @@ def anti_community_gd(iterations, learning_rate, beta1, beta2, individual_coeffs
             if abs((((initial_score - history[x-i]) / initial_score) * 100) - (((initial_score - avg_score) / initial_score) * 100)) > 0.2:
               all_bad = False
           if all_bad:
+            print("not enough progress to continue--stopping optimization")
             break
 
       if avg_score < best_score:
@@ -239,7 +362,7 @@ def anti_community_gd(iterations, learning_rate, beta1, beta2, individual_coeffs
   plt.plot(times, history)
   return best_coeffs
 
-def undirected_graph_sort(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, copy_prod):
+def undirected_graph_sort(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, copy_prod, min_coeffs, max_coeffs, conservation_constraints):
   print()
   print("Beginning undirected graph sort gradient descent")
   """### 6. Undirected Graph Sort"""
@@ -373,6 +496,30 @@ def undirected_graph_sort(iterations, learning_rate, beta1, beta2, individual_co
 
   tick = time.time()
   new_prod_coeffs = copy_prod()
+  if min_coeffs == 1:
+    min_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      min_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        min_coeffs[i].append(new_prod_coeffs[i][j]/2)
+  if max_coeffs == 1:
+    max_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      max_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        max_coeffs[i].append(new_prod_coeffs[i][j]*1.5)
+  if min_coeffs == 0:
+    min_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      min_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        min_coeffs[i].append(-10000000000000000000000000000)
+  if max_coeffs == 0:
+    max_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      max_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        max_coeffs[i].append(10000000000000000000000000000)
   history = []
 
   values_to_change = topo_sort_graph  # value 1260 was found to have the most effect, and value 1102 was found to have the most effect out of any value that shared coeff yield changes with value 1260
@@ -508,8 +655,23 @@ def undirected_graph_sort(iterations, learning_rate, beta1, beta2, individual_co
 
           if initial_coefficients[h][i] < 0:
             initial_coefficients[h][i] = 0
+          if initial_coefficients[h][i]<min_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]:
+            initial_coefficients[h][i]=min_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]
+          if initial_coefficients[h][i]>max_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]:
+            initial_coefficients[h][i]=max_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]
 
           new_prod_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]] = initial_coefficients[h][i]
+ 
+          for group in conservation_constraints:
+            relier = group[2]
+            if relier == [map[values_to_change[i]][0],map[values_to_change[i]][1]] and relier != 0:
+              other_sum = 0
+              for coeff in group[0]:
+                if coeff != relier:
+                  other_sum += new_prod_coeffs[coeff[0]][coeff[1]]
+              relier_val = group[1]-other_sum
+              new_prod_coeffs[relier[0]][relier[1]] = relier_val
+              initial_coefficients[h][i] = relier_val          
 
         times.append(time.time()-tick)
         history_raw.append(avg_score)
@@ -538,7 +700,7 @@ def undirected_graph_sort(iterations, learning_rate, beta1, beta2, individual_co
   return initial_coefficients
 
 
-def standard_gd(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, copy_prod):
+def standard_gd(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, copy_prod, min_coeffs, max_coeffs, conservation_constraints):
   print()
   print("Beginning standard gradient descent")
   """### 7. Standard GD (Avg Score)"""
@@ -577,6 +739,30 @@ def standard_gd(iterations, learning_rate, beta1, beta2, individual_coeffs, eval
 
   tick = time.time()
   new_prod_coeffs = copy_prod()
+  if min_coeffs == 1:
+    min_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      min_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        min_coeffs[i].append(new_prod_coeffs[i][j]/2)
+  if max_coeffs == 1:
+    max_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      max_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        max_coeffs[i].append(new_prod_coeffs[i][j]*1.5)
+  if min_coeffs == 0:
+    min_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      min_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        min_coeffs[i].append(-10000000000000000000000000000)
+  if max_coeffs == 0:
+    max_coeffs = []
+    for i in range(len(new_prod_coeffs)):
+      max_coeffs.append([])
+      for j in range(len(new_prod_coeffs[i])):
+        max_coeffs[i].append(10000000000000000000000000000)
   history = []
 
   values_to_change = individual_coeffs  # value 1260 was found to have the most effect, and value 1102 was found to have the most effect out of any value that shared coeff yield changes with value 1260
@@ -674,7 +860,24 @@ def standard_gd(iterations, learning_rate, beta1, beta2, individual_coeffs, eval
 
           if initial_coefficients[h][i] < 0:
             initial_coefficients[h][i] = 0
+          if initial_coefficients[h][i]<min_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]:
+            initial_coefficients[h][i]=min_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]
+          if initial_coefficients[h][i]>max_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]:
+            initial_coefficients[h][i]=max_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]]
 
+          new_prod_coeffs[map[values_to_change[i]][0]][map[values_to_change[i]][1]] = initial_coefficients[h][i]
+ 
+          for group in conservation_constraints:
+            relier = group[2]
+            if relier == [map[values_to_change[i]][0],map[values_to_change[i]][1]] and relier != 0:
+              other_sum = 0
+              for coeff in group[0]:
+                if coeff != relier:
+                  other_sum += new_prod_coeffs[coeff[0]][coeff[1]]
+              relier_val = group[1]-other_sum
+              new_prod_coeffs[relier[0]][relier[1]] = relier_val
+              initial_coefficients[h][i] = relier_val
+              
       history.append(avg_score)
       times.append(time.time()-tick)
 
@@ -798,7 +1001,7 @@ def f0am_file(prod_list_n_r, mech_name, copy_prod, optimized_coeffs, individual_
 
 from setup import *
 
-def AMORE_Optimization(iterations=400, learning_rate=0.015, input_conditions=1, method="anticommunity", individual_params=1, lower_limit=0, upper_limit=1000, beta1=0.9, beta2=0.9, mech_name="optimized_mechanism"):
+def AMORE_Optimization(iterations=400, learning_rate=0.015, input_conditions=1, method="anticommunity", individual_params=1, lower_limit=0, upper_limit=1000, beta1=0.9, beta2=0.9, mech_name="optimized_mechanism", min_coeffs=0, max_coeffs=0, conservation_constraints={}):
   # setup.config = {'mech_file': mech_file, 'full_eqn': full_eqn, 'full_spc': full_spc, 'input_conditions': input_conditions, 'individual_params': 1}
   # initialize({'mech_file': mech_file, 'full_eqn': full_eqn, 'full_spc': full_spc, 'input_conditions': input_conditions, 'individual_params': 1})
   # lower_limit=0, upper_limit=1000, alpha=0.9, beta=0.9, learning_rate, 'method': method
@@ -807,12 +1010,37 @@ def AMORE_Optimization(iterations=400, learning_rate=0.015, input_conditions=1, 
   optimized_coeffs = [[]]
   valid_method = True
 
+  # check which coefficients, if any, in the conservation constrations are in
+  # multiple groups, and then choose a coefficient whithin each group to be
+  # reliant on the others, and append that to each list after the sum coefficient
+  # {'r1': {'constraints': [[[a,b,c],1]], 'prod_ranges': [[a,0,1],[b,0.5,0.8],[c,0.2,0.8]]}}
+  if conservation_constraints != 1:
+    for key in list(conservation_constraints.keys()):
+      found_twice = []
+      for i in range(len(conservation_constraints[key]['constraints'])):
+        for coeff in conservation_constraints[key]['constraints'][i][0]:
+          for j in range(i+1, len(conservation_constraints[key]['constraints'])):
+            if coeff in conservation_constraints[key]['constraints'][j][0]:
+              found_twice.append(coeff)
+      for i in range(len(conservation_constraints[key]['constraints'])):
+        possible_reliers = []
+        for coeff in conservation_constraints[key]['constraints'][i][0]:
+          if coeff not in found_twice:
+            possible_reliers.append(coeff)
+        if len(possible_reliers) == 0:
+          print("it is impossible for", conservation_constraints[key]['constraints'][i][0], "to add up to", conservation_constraints[key]['constraints'][i][1], "because all of these coefficients are in other conservation groups too")
+          conservation_constraints[key]['constraints'][i].append(0)
+        else:
+          conservation_constraints[key]['constraints'][i].append(possible_reliers)
+  else:
+    conservation_constraints = {}
+
   if method == "anticommunity":
-    optimized_coeffs = anti_community_gd(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, copy_prod)
+    optimized_coeffs = anti_community_gd(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, prod_list_n_r, copy_prod, min_coeffs, max_coeffs, conservation_constraints)
   elif method == "undirectedgraph":
-    optimized_coeffs = undirected_graph_sort(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, copy_prod)
+    optimized_coeffs = undirected_graph_sort(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, copy_prod, min_coeffs, max_coeffs, conservation_constraints)
   elif method == "standard":
-    optimized_coeffs = standard_gd(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, copy_prod)
+    optimized_coeffs = standard_gd(iterations, learning_rate, beta1, beta2, individual_coeffs, evaluate, matrix_keys, individual_coeff_map, copy_prod, min_coeffs, max_coeffs, conservation_constraints)
   else:
     print("Please choose a valid optimization method: anticommunity, undirectedgraph, or standard")
     valid_method = False
