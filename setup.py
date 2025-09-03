@@ -1,3 +1,4 @@
+# this setup allows for the user to choose to not optimize coefficients if they are isop or =1, and it also has compare species groups
 from variables import config
 # input_conditions = 1
 
@@ -7,6 +8,7 @@ if len(config)>0:
   full_eqn = config['full_eqn']
   full_spc = config['full_spc']
   individual_params = config['individual_params']
+  ignore_coeffs = config['ignore']
 else:
   print("Please configure your variables in variables.py")
 
@@ -274,6 +276,67 @@ def KFPAN(T,M):
     FC = 10**(np.log10(FCC)/(1+(np.log10(KRC)/NC)**2)) ;
     return (KC0*KCI)*FC/(KC0+KCI) ;
 
+def cycle_simulator_3_out(cycle_species, in_spec, graph, out_graph, in_graph, iteration_set, cutoff, all_spec, out_spec):
+    data_set = []
+    search = {in_spec:1}
+    counter = 0
+    data = {j:0 for j in all_spec}
+    out_dat = {j:0 for j in cycle_species}
+    while counter<iteration_set[1]:
+        new_search = {}
+        if counter == iteration_set[0]:
+            data_1 = {p:data[p] for p in data}
+            search_1 = {p:search[p] for p in search}
+        for k in search:
+            #data[k] = data[k]-search[k]
+            return_amount = 0
+            for x in graph[k]:
+                data[x] = data[x] + graph[k][x]*search[k]
+                
+                if x in cycle_species:
+                    return_amount = return_amount + search[k]*graph[k][x]
+                    if graph[k][x]*search[k]>cutoff:
+                        if x in new_search:
+                            new_search[x] = new_search[x] + graph[k][x]*search[k]
+                        else:
+                            new_search[x] = graph[k][x]*search[k]
+            out_dat[k] = out_dat[k] + search[k]-return_amount
+        search = {p:new_search[p] for p in new_search}
+        counter = counter + 1
+    frac1 = 0
+    frac2 = 0
+    for n in cycle_species:
+        if n in search_1:
+            frac1 = frac1 + search_1[n]
+        if n in search:
+            frac2 = frac2 + search[n]
+    for i in out_dat:
+        out_dat[i] = max(0,out_dat[i]/max(1-frac2,1e-20))
+    final_data = {}
+    within_data = {}
+    denom = frac2-frac1
+    if denom ==0:
+        denom = 1e-20
+    for n in out_spec:
+        slope = (data[n]-data_1[n])/denom
+        dat = data[n] - slope*frac2
+        final_data[n] = dat
+    for n in cycle_species:
+        slope = (data[n]-data_1[n])/denom
+        dat = data[n] - slope*frac2
+        within_data[n] = dat
+    within_data_2 = {}
+    within_data_sum = 0
+    for i in within_data:
+        within_data_sum = within_data_sum + within_data[i]
+    for i in within_data:
+        within_data_2[i] = abs(within_data[i]/max(within_data_sum,1e-20))
+
+    final_in_data = {}
+    for i in within_data_2:
+        final_in_data[i] = np.mean([within_data_2[i],out_dat[i]])
+    return final_data, final_in_data, out_dat #, data
+
 def cycle_simulator_2(cycle_species, in_spec, graph, out_graph, in_graph, iteration_set, cutoff):
     all_spec = {i for i in cycle_species}
     out_spec = set()
@@ -321,7 +384,69 @@ def cycle_simulator_2(cycle_species, in_spec, graph, out_graph, in_graph, iterat
         final_data[n] = dat
     return final_data#, data
 
+def solve_j_rate(i, sza,SUN):
+    if i == 'J(22)' or i== 'J22':
+        I = 5.804e-6;
+        m = 1.092;
+        n = 0.377;
+        k = j_func(sza,I,m,n)*SUN
+    elif i == 'J(34)' or i== 'J34':
+        I = 1.537e-4;
+        m = 0.170;
+        n = 0.208;
+        k = j_func(sza,I,m,n)*SUN
+    elif i == 'J(41)' or i== 'J41':
+        I = 7.649e-6;
+        m = 0.682;
+        n = 0.279;
+        k = j_func(sza,I,m,n)*SUN
+    elif i == 'J(31)' or i== 'J31':
+        I = 6.845e-5
+        m = 0.130
+        n = 0.201
+        k = j_func(sza,I,m,n)*SUN
+    elif i == 'J(32)' or i== 'J32':
+        I = 1.032e-5
+        m = 0.130
+        n = 0.201
+        k = j_func(sza,I,m,n)*SUN
+    elif i == 'J(33)' or i== 'J33':
+        I = 3.802e-5
+        m = 0.644
+        n = 0.312
+        k = j_func(sza,I,m,n)*SUN
+    elif i == 'J(11)' or i== 'J11':
+        I = 4.642e-5
+        m = 0.762
+        n = 0.353
+        k = j_func(sza,I,m,n)*SUN
+    elif i == 'J(12)' or i== 'J12':
+        I = 6.853e-5
+        m = 0.477
+        n = 0.323
+        k = j_func(sza,I,m,n)*SUN 
+    elif i == 'J(15)' or i== 'J15':
+        I = 2.792e-5
+        m = 0.805
+        n = 0.338
+        k = j_func(sza,I,m,n)*SUN
+    elif i == 'J(51)' or i== 'J51':
+        I = 1.588e-6;
+        m = 1.154;
+        n = 0.318;
+        k = j_func(sza,I,m,n)*SUN
+    return k
 """PROD 3: Find yields of species with new reaction dictionary based on test prod coefficients"""
+
+
+
+
+    
+
+
+
+
+
 
 def f0am_to_python(mech):
   species_list_0, reaction_list_0 = mech.split('AddSpecies')
@@ -366,15 +491,24 @@ def f0am_to_python(mech):
       r10 = r9.replace('KBPAN', 'KBPAN(TEMP,M)')
       r11 = r10.replace('/T)', '/TEMP)')
       r12 = r11.replace('F0AM_isop_NIT', 'NIT')
-      r13 = r12.replace('F0AM_isop_ALK', 'ALK')
-      r14 = r13.replace('T,M,', '')
-      r15 = r14.replace('F0AM_isop_TUN', 'TUN')
-      r16 = r15.replace('F0AM_isop_EPO', 'EPO')
+      r13 = r12.replace('F0AM_isop_ALK(T,M,', 'ALK(')
+      #r14 = r13.replace('T,M,', '')
+      r15 = r13.replace('F0AM_isop_TUN(T,M,', 'TUN(')
+      r16 = r15.replace('F0AM_isop_EPO(T,M,', 'EPO(')
+      r16 = r16.replace('F0AM_isop_TROE2(T,M,','TROE(')
+      r16 = r16.replace('F0AM_isop_ISO1(T,','ISO1(')
+      r16 = r16.replace('F0AM_isop_ISO2(T,','ISO2(')
+      r16 = r16.replace('F0AM_isop_KCO(T,M,','KCO(')
+      r16 = r16.replace('F0AM_isop_FALL(T,M,','FALL(')
+      r16 = r16.replace('F0AM_isop_ALK(T,', 'ALK(')
       rates_3.append(r16)
   rates = deepcopy(rates_3)
   rates_eval = []
   for i in rates_3:
-      rates_eval.append(eval(i))
+      if 'J' in i:
+          rates_eval.append(1e-5)
+      else:
+          rates_eval.append(eval(i))
   specs_1 = []
   losses = []
   reac_list = []
@@ -623,8 +757,16 @@ def get_yields_from_inputs(inputs):
             new_out[x] = out_spec
 
             data = cycle_simulator_2(i, x, graph_2,out_graph,in_graph, [leny+20,2*(leny+40)],1e-6) # faster parameters
+                                       #(, graph, out_graph, in_graph, iteration_set, cutoff, all_spec, out_spec)
             # data = cycle_simulator_2(i, x, graph_2,out_graph,in_graph, [leny+200,2*(leny+400)],0) # starter slower parameters
             new_graph[x] = data
+            #for p in out_data:
+               
+            #    if p in new_graph[x]:
+                    
+            #        new_graph[x][p] += out_data[p]
+            #    else:
+            #        new_graph[x][p] = out_data[p]
         for y in i:
             if y not in in_cycle_spec:
                 for s in out_graph[y]:
@@ -643,6 +785,10 @@ def get_yields_from_inputs(inputs):
     # compare species will be formatted as a list of species
       # most species in reduced mechanism compare 1 to 1 with reference, but some compare to a group of species
     # check if species are in full species list and if not then take out of category
+
+
+
+
 
 def get_yields(start, cutoff, graph, in_graph, out_graph, back_set, spec_len):
     yields = {i:0 for i in range(spec_len)}
@@ -810,56 +956,57 @@ def get_k_list(rate_list, sza, temp):
     k_list = []
     for i in rate_list:
         # print(i)
-        if i == 'J(22)' or i== 'J22':
-            I = 5.804e-6;
-            m = 1.092;
-            n = 0.377;
-            k_list.append(j_func(sza,I,m,n)*SUN)
-        elif i == 'J(34)' or i== 'J34':
-            I = 1.537e-4;
-            m = 0.170;
-            n = 0.208;
-            k_list.append(j_func(sza,I,m,n)*SUN)
-        elif i == 'J(41)' or i== 'J41':
-            I = 7.649e-6;
-            m = 0.682;
-            n = 0.279;
-            k_list.append(j_func(sza,I,m,n)*SUN)
-        elif i == 'J(31)' or i== 'J31':
-            I = 6.845e-5
-            m = 0.130
-            n = 0.201
-            k_list.append(j_func(sza,I,m,n)*SUN)
-        elif i == 'J(32)' or i== 'J32':
-            I = 1.032e-5
-            m = 0.130
-            n = 0.201
-            k_list.append(j_func(sza,I,m,n)*SUN)
-        elif i == 'J(33)' or i== 'J33':
-            I = 3.802e-5
-            m = 0.644
-            n = 0.312
-            k_list.append(j_func(sza,I,m,n)*SUN)
-        elif i == 'J(11)' or i== 'J11':
-            I = 4.642e-5
-            m = 0.762
-            n = 0.353
-            k_list.append(j_func(sza,I,m,n)*SUN)
-        elif i == 'J(12)' or i== 'J12':
-            I = 6.853e-5
-            m = 0.477
-            n = 0.323
-            k_list.append(j_func(sza,I,m,n)*SUN)
-        elif i == 'J(15)' or i== 'J15':
-            I = 2.792e-5
-            m = 0.805
-            n = 0.338
-            k_list.append(j_func(sza,I,m,n)*SUN)
-        elif i == 'J(51)' or i== 'J51':
-            I = 1.588e-6;
-            m = 1.154;
-            n = 0.318;
-            k_list.append(j_func(sza,I,m,n)*SUN)
+        if 'J' in i:
+            if 'J(22)' in i or 'J22' in i:
+                I = 5.804e-6;
+                m = 1.092;
+                n = 0.377;
+                k_list.append(j_func(sza,I,m,n)*SUN)
+            elif 'J(34)' in i or 'J34' in i:
+                I = 1.537e-4;
+                m = 0.170;
+                n = 0.208;
+                k_list.append(j_func(sza,I,m,n)*SUN)
+            elif 'J(41)' in i or 'J41' in i:
+                I = 7.649e-6;
+                m = 0.682;
+                n = 0.279;
+                k_list.append(j_func(sza,I,m,n)*SUN)
+            elif 'J(31)' in i or 'J31' in i:
+                I = 6.845e-5
+                m = 0.130
+                n = 0.201
+                k_list.append(j_func(sza,I,m,n)*SUN)
+            elif 'J(32)' in i or 'J32' in i:
+                I = 1.032e-5
+                m = 0.130
+                n = 0.201
+                k_list.append(j_func(sza,I,m,n)*SUN)
+            elif 'J(33)' in i or 'J33' in i:
+                I = 3.802e-5
+                m = 0.644
+                n = 0.312
+                k_list.append(j_func(sza,I,m,n)*SUN)
+            elif 'J(11)' in i or 'J11' in i:
+                I = 4.642e-5
+                m = 0.762
+                n = 0.353
+                k_list.append(j_func(sza,I,m,n)*SUN)
+            elif 'J(12)' in i or 'J12' in i:
+                I = 6.853e-5
+                m = 0.477
+                n = 0.323
+                k_list.append(j_func(sza,I,m,n)*SUN)
+            elif 'J(15)' in i or 'J15' in i:
+                I = 2.792e-5
+                m = 0.805
+                n = 0.338
+                k_list.append(j_func(sza,I,m,n)*SUN)
+            elif 'J(51)' in i or 'J51' in i:
+                I = 1.588e-6;
+                m = 1.154;
+                n = 0.318;
+                k_list.append(j_func(sza,I,m,n)*SUN)
         elif isinstance(i,str):
             k_list.append(eval(i))
         else:
@@ -1175,7 +1322,7 @@ second_reactants = ['MVK3OOH4N',
 scnd_dict = {}
 for i in second_reactants:
     scnd_dict[i] = 0
-
+print('hi there')
 
 # algorithm settings
 settings = {}
@@ -1547,53 +1694,61 @@ int_yield = 0
 tetra_yield = 0
 ihn_plus_yield = 0
 
-compare_species = ['ISOP1OH23O4OHt', 'ISOP1OH23O4OHc', 'ISOP1OH2OH34O', 'MVK', 'HCHO', 'HAC', 'GLYC', 'MGLY', 'MACR','OH','NO',    'NO2',    'O3',     'HO2','CH3OO','CH3CO3']
-compare_species_r = []
+compare_species = {'IEPOX':['ISOP1OH23O4OHt', 'ISOP1OH23O4OHc', 'ISOP1OH2OH34O'], 'MVK':'MVK', 'HCHO':'HCHO', 'HAC':'HAC', 'GLYC':'GLYC', 'MGLY':'MGLY', 'MACR':'MACR','OH':'OH','NO':'NO',    'NO2':'NO2',    'O3':'O3',     'HO2':'HO2','CH3OO':'CH3OO','CH3CO3':'CH3CO3', 'ISOPN':isop_nit_tetra, 'TETRA':tetra, 'IHN':ihn_plus}
+compare_species_r = {'IEPOX':['ISOP1OH23O4OHt', 'ISOP1OH23O4OHc', 'ISOP1OH2OH34O'], 'MVK':'MVK', 'HCHO':'HCHO', 'HAC':'HAC', 'GLYC':'GLYC', 'MGLY':'MGLY', 'MACR':'MACR','OH':'OH','NO':'NO',    'NO2':'NO2',    'O3':'O3',     'HO2':'HO2','CH3OO':'CH3OO','CH3CO3':'CH3CO3', 'ISOPN':isop_nit_tetra, 'TETRA':tetra, 'IHN':ihn_plus}
 
-yi2, new_graph, new_in = get_yields_from_inputs(inputs_ref)
-for index, i in enumerate(compare_species):
-  compare_species[index] = [i]
-  if i == 'isop_nit_tetra':
-    caty = []
-    for spec in isop_nit_tetra:
-      if spec in full_spc:
-        caty.append(spec)
-    for i in caty:
-            spec_yi = 0
-            for x in new_in[i]:
-                if x not in caty:
-                    if i in new_graph[x]:
-                        spec_yi += new_graph[x][i]*yi2[x]
-            int_yield += spec_yi
-    compare_species_r.append([caty])
-  elif i == 'tetra':
-    caty = []
-    for spec in tetra:
-      if spec in full_spc:
-        caty.append(spec)
-    for i in caty:
-            spec_yi = 0
-            for x in new_in[i]:
-                if x not in caty:
-                    if i in new_graph[x]:
-                        spec_yi += new_graph[x][i]*yi2[x]
-            tetra_yield += spec_yi
-    compare_species_r.append([caty])
-  elif i == 'ihn_plus_yield':
-    caty = []
-    for spec in ihn_plus_yield:
-      if spec in full_spc:
-        caty.append(spec)
-    for i in caty:
-            spec_yi = 0
-            for x in new_in[i]:
-                if x not in caty:
-                    if i in new_graph[x]:
-                        spec_yi += new_graph[x][i]*yi2[x]
-            ihn_plus_yield += spec_yi
-    compare_species_r.append([caty])
-  else:
-    compare_species_r.append([i])
+
+species_list_names_2 = deepcopy(species_list_names)
+species_list_names_2.append('ISOPN')
+species_list_names_2.append('TETRA')
+species_list_names_2.append('IHN')
+dic = {species_list_names[i]:i for i in range(len(species_list_names))}
+dic_r = {species_list_names_r[i]:i for i in range(len(species_list_names_r))}
+#yi2, new_graph, new_in = get_yields_from_inputs(inputs_ref)
+#for index, i in enumerate(compare_species):
+#  compare_species[index] = [i]
+#  if i == 'isop_nit_tetra':
+#    caty = []
+#    for spec in isop_nit_tetra:
+#      if spec in full_spc:
+#        caty.append(spec)
+#    for i in caty:
+#            spec_yi = 0
+#            for x in new_in[i]:
+#                if x not in caty:
+#                    if i in new_graph[x]:
+#                        spec_yi += new_graph[x][i]*yi2[x]
+#            int_yield += spec_yi
+#    compare_species_r.append([caty])
+#  elif i == 'tetra':
+#    caty = []
+#    for spec in tetra:
+#      if spec in full_spc:
+#        caty.append(spec)
+#    for i in caty:
+#            spec_yi = 0
+#            for x in new_in[i]:
+#                if x not in caty:
+#                    if i in new_graph[x]:
+#                        spec_yi += new_graph[x][i]*yi2[x]
+#            tetra_yield += spec_yi
+#    compare_species_r.append([caty])
+#  elif i == 'ihn_plus_yield':
+#    caty = []
+#    for spec in ihn_plus_yield:
+#      if spec in full_spc:
+#        caty.append(spec)
+#    for i in caty:
+#            spec_yi = 0
+#            for x in new_in[i]:
+#                if x not in caty:
+#                    if i in new_graph[x]:
+#                        spec_yi += new_graph[x][i]*yi2[x]
+#            ihn_plus_yield += spec_yi
+#    compare_species_r.append([caty])
+#  else:
+#    compare_species_r.append([i])
+
 
 reference_data = [{} for i in range(len(input_conditions))]
 for i in range(len(input_conditions)):
@@ -1609,22 +1764,28 @@ for i in range(len(input_conditions)):
     atm_cond['sun'] = input_conditions[i]['sun']
     inputs_ref['bck'] = background_dict_2
     # 'spc', 'rxn', 'bck', 'scnd', 'atm cond', 'settings'
-    yields_ref, _, _ = get_yields_from_inputs(inputs_ref)
+    yields_ref, new_graph, new_in = get_yields_from_inputs(inputs_ref)
+
     for j in compare_species:
-      for k in j:
-        reference_data[i][k] = yields_ref[k]
+      if isinstance(compare_species[j], list):
+          cat_yield = 0
+          for k in compare_species[j]:
+            if k in species_list_names:
+                cat_yield+= yields_ref[k]
+          reference_data[i][j] = cat_yield
+      else:
+        reference_data[i][j] = yields_ref[compare_species[j]]
 
 
 spec_factor = {}
 for k in compare_species:
-  for j in k:
-    if j not in background_spc_n:
-        yield_list = []
-        for i in range(len(reference_data)):
-            yield_list.append(abs(reference_data[i][j]))
-        spec_factor[j] = max(yield_list)
-    else:
-        spec_factor[j] = 1
+  if k not in background_spc_n:
+    yield_list = []
+    for i in range(len(reference_data)):
+        yield_list.append(abs(reference_data[i][k]))
+    spec_factor[k] = 1 #max(yield_list)
+  else:
+    spec_factor[k] = -1
 
 """PROD 4: Update the reduced mechanism dictionary with the yields that are found from the prod coefficients
 
@@ -1634,44 +1795,27 @@ There are two important dictionaries that go into this evaluation function: 1) T
 We then look at species that we want to compare and assign a score based on the similarity of the reduction species yield and reference species yield
 """
 
-reduction_data = [{} for i in range(len(input_conditions))]
-for i in range(len(input_conditions)):
-    background_dict_2['OH'] = input_conditions[i]['OH']
-    background_dict_2['HO2'] = input_conditions[i]['HO2']
-    background_dict_2['NO'] = input_conditions[i]['NO']
-    background_dict_2['O3'] = input_conditions[i]['O3']
-    background_dict_2['NO3'] = input_conditions[i]['NO3']
-    background_dict_2['CH3OO'] = input_conditions[i]['CH3OO']
-    background_dict_2['CH3CO3'] = input_conditions[i]['CH3CO3']
-    background_dict_2['O2'] = 210000000
-    atm_cond['sza'] = input_conditions[i]['sza']
-    atm_cond['sun'] = input_conditions[i]['sun']
-    inputs_test['bck'] = background_dict_2
-    yields_test, _, _ = get_yields_from_inputs(inputs_test) # get yields of species from new dictionary with test prod coefficients
-    for k in compare_species:
-      for j in k:
-        reduction_data[i][j] = yields_test[j] # update the reduction mechanism dictionary's species' yields that you want to compare with the yields found
-                                              # from the test prod coefficients
-score_matrix = [{},{},{},{},{},{}]
-score_list = []
-for i in range(len(input_conditions)):
-    for k in compare_species:
-      for j in k:
-        if spec_factor[j]!=1:
-            score = (abs(reference_data[i][j])/spec_factor[j])*(reduction_data[i][j] - reference_data[i][j])/abs(abs(reduction_data[i][j])+abs(reference_data[i][j]))
-            score_matrix[i][j] = score
-            score_list.append(abs(score))
-        else:
-            score = (reduction_data[i][j] - reference_data[i][j])/abs(abs(reduction_data[i][j])+abs(reference_data[i][j]))
-            score_matrix[i][j] = score
-            score_list.append(abs(score))
-avg_score = np.mean(score_list)
+#reduction_data = [{} for i in range(len(input_conditions))]
+#for i in range(len(input_conditions)):
+#    background_dict_2['OH'] = input_conditions[i]['OH']
+#    background_dict_2['HO2'] = input_conditions[i]['HO2']
+#    background_dict_2['NO'] = input_conditions[i]['NO']
+#    background_dict_2['O3'] = input_conditions[i]['O3']
+#    background_dict_2['NO3'] = input_conditions[i]['NO3']
+#    background_dict_2['CH3OO'] = input_conditions[i]['CH3OO']
+#    background_dict_2['CH3CO3'] = input_conditions[i]['CH3CO3']
+#    background_dict_2['O2'] = 210000000
+#    atm_cond['sza'] = input_conditions[i]['sza']
+#    atm_cond['sun'] = input_conditions[i]['sun']
+#    inputs_test['bck'] = background_dict_2
+#    yields_test, _, _ = get_yields_from_inputs(inputs_test) # get yields of species from new dictionary with test prod coefficients
+#    for k in compare_species:
+#      for j in k:
 
-spec_factor
 
 prod_list_n_r
 # prod_coeff_list_r
-
+red_set = set(species_list_names_r)
 # does this produce an evaluation diffferent than the evaluation function a few cells above?
 def evaluate(coeff):
   inputs_test['rxn']['prod'] = prod_list_n_r
@@ -1690,33 +1834,41 @@ def evaluate(coeff):
       atm_cond['sun'] = input_conditions[i]['sun']
       inputs_test['bck'] = background_dict_2
       yields_test, new_graph, new_in = get_yields_from_inputs(inputs_test)
-      for k in compare_species:
-        for j in k:
-          reduction_data[i][j] = yields_test[j]
+      for j in compare_species_r:
+          if isinstance(compare_species_r[j], list):
+              cat_yield = 0
+              for k in compare_species[j]:
+                if k in species_list_names_r and k in yields_test:
+                    cat_yield+= yields_test[k]
+              reduction_data[i][j] = cat_yield
+          else:
+              reduction_data[i][j] = yields_test[compare_species_r[j]]
   score_matrix = [{},{},{},{},{},{}]
   score_list = []
   for i in range(len(input_conditions)):
       counter = 0
-      for j in range(len(compare_species)):
-          ref_score = reference_data[i][compare_species[j][0]]
+      for j in compare_species:
+          ref_score = reference_data[i][j]
           red_score = 0
-          spec_score = spec_factor[compare_species[j][0]]
-          for k in compare_species_r[j]:
-            red_score += reduction_data[i][k]
-          if spec_factor[compare_species[j][0]]!=1:
-              score = (abs(ref_score)/spec_score)*(red_score - ref_score)/abs(abs(red_score)+abs(ref_score))
-              score_matrix[i][compare_species[j][0]] = score
+          spec_score = spec_factor[j]
+          red_score = reduction_data[i][j]
+          #(abs(ref_score)/spec_score)*
+          if spec_factor[j]!=-1:
+              score = (red_score - ref_score)/abs(abs(red_score)+abs(ref_score))
+              score_matrix[i][j] = score
               score_list.append(abs(score))
           else:
               score = (red_score - ref_score)/abs(abs(red_score)+abs(ref_score))
-              score_matrix[i][compare_species[j][0]] = score
+              score_matrix[i][j] = score
               score_list.append(abs(score))
           counter += 1
   avg_score = np.mean(score_list)
   return avg_score, score_matrix
 
 avg_score, score_matrix = evaluate(prod_coeff_list_r)
+
 print("Initial evalution:", avg_score)
+print("Initial score matrix:", score_matrix)
 
 def test_get_yields_from_inputs(inputs, yCoeff, yCoeff2, cutoff):
     t1 = time.time()
@@ -1988,25 +2140,65 @@ new_prod_coeffs = copy_prod()
 avg_score, score_matrix = evaluate(new_prod_coeffs)
 
 """~1 hour - find the importance of each coefficient"""
-
-def find_yield_change():
+matrix_keys = []
+for k in compare_species:
+    matrix_keys.append(k)
+    
+def find_yield_change(ignore_coeffs):
   print("Starting sensitivity analysis")
   avg_score, score_matrix = evaluate(new_prod_coeffs)
   starter_score = avg_score
   # the starter matrix that is commented out is the original starter matrix from the slower parameters, but since we are now analyzing the difference of the yields when each coefficient is changed, we are comparing it to the matrix made with the faster parameters
   # starter_matrix = [{'ISOP1OH23O4OHt': -0.09787251925728065, 'ISOP1OH23O4OHc': -0.09558028413305211, 'ISOP1OH2OH34O': -0.015616054795262353, 'MVK': -0.00011169877812379283, 'HCHO': -0.05183290208181358, 'HAC': 0.19556194751656328, 'GLYC': -0.514966777088693, 'MGLY': 0.18847700857726427, 'MACR': -0.032902437776138736, 'OH': 0.19404496745100205, 'NO': 0.3174873026885275, 'NO2': -0.11845417702324008, 'O3': 0.1528228566728389, 'HO2': 0.11608801330600477, 'CH3OO': -0.007794277285444426, 'CH3CO3': -0.37894577272962077}, {'ISOP1OH23O4OHt': -0.16125046649836713, 'ISOP1OH23O4OHc': -0.1560599734025661, 'ISOP1OH2OH34O': -0.012129678874647946, 'MVK': 0.00043687481125419806, 'HCHO': -0.04547141562485739, 'HAC': 0.18576642096347573, 'GLYC': -0.38274666049091777, 'MGLY': 0.1744041433091504, 'MACR': -0.03679418730768008, 'OH': 0.12577936902946557, 'NO': 0.18958353702378541, 'NO2': -0.10213591740079915, 'O3': -0.558662938158745, 'HO2': 0.12201984645243, 'CH3OO': -0.29802286443210113, 'CH3CO3': -0.36716456631166233}, {'ISOP1OH23O4OHt': -0.09619082668875414, 'ISOP1OH23O4OHc': -0.09487844433047589, 'ISOP1OH2OH34O': -0.023072351981525192, 'MVK': 8.493505365820696e-05, 'HCHO': -0.045745520515016666, 'HAC': 0.16589678750795747, 'GLYC': -0.5016760439465852, 'MGLY': 0.18679759979838026, 'MACR': -0.012893719923402564, 'OH': 0.18708959609397952, 'NO': 0.19311661076059444, 'NO2': -0.1382948173311869, 'O3': 0.05128034156161733, 'HO2': 0.08253892887776249, 'CH3OO': -0.11878819329186503, 'CH3CO3': -0.3499942922636299}, {'ISOP1OH23O4OHt': -0.13281073405167346, 'ISOP1OH23O4OHc': -0.1287837391959723, 'ISOP1OH2OH34O': -0.012680997696579533, 'MVK': 0.0005600163269455355, 'HCHO': -0.05882275753271708, 'HAC': 0.17819555955141128, 'GLYC': -0.41857012340260313, 'MGLY': 0.19290368412444636, 'MACR': -0.024368687630766498, 'OH': 0.13369586053660287, 'NO': 0.21390567552327483, 'NO2': -0.13656810530869581, 'O3': 0.16506050695467156, 'HO2': 0.09867696918634818, 'CH3OO': -0.013246328711034837, 'CH3CO3': -0.41716433918163687}, {'ISOP1OH23O4OHt': -0.04571803994052719, 'ISOP1OH23O4OHc': -0.04513555434109117, 'ISOP1OH2OH34O': -0.011880375078875204, 'MVK': -0.007864826106213946, 'HCHO': -0.0805283648373068, 'HAC': 0.19870408232460904, 'GLYC': -0.5941527306781748, 'MGLY': 0.19042456456984375, 'MACR': -0.055088332330735866, 'OH': 0.1761138035611046, 'NO': 0.5176109566682872, 'NO2': -0.11868289155513966, 'O3': -0.40141790081752554, 'HO2': 0.0755153168596899, 'CH3OO': 0.050686045631993075, 'CH3CO3': -0.3880358408013048}, {'ISOP1OH23O4OHt': -0.07987689707129189, 'ISOP1OH23O4OHc': -0.07885919941119564, 'ISOP1OH2OH34O': -0.020526640123079507, 'MVK': 0.00047274644565867735, 'HCHO': -0.08753436946477353, 'HAC': 0.2090625149622428, 'GLYC': -0.5861835064366345, 'MGLY': 0.21859244252647558, 'MACR': -0.015436748250977211, 'OH': 0.1483209846021159, 'NO': 0.2382690077063841, 'NO2': -0.1893866691548442, 'O3': 0.16688874712004842, 'HO2': 0.0674360199113856, 'CH3OO': -0.010575745486166974, 'CH3CO3': -0.4778530972933386}]
   starter_matrix = score_matrix
-  matrix_keys = ['ISOP1OH23O4OHt', 'ISOP1OH23O4OHc', 'ISOP1OH2OH34O', 'MVK', 'HCHO', 'HAC', 'GLYC', 'MGLY', 'MACR', 'OH', 'NO', 'NO2', 'O3', 'HO2', 'CH3OO', 'CH3CO3']
-  empty_matrix = [{'ISOP1OH23O4OHt': 0.0, 'ISOP1OH23O4OHc': 0.0, 'ISOP1OH2OH34O': 0.0, 'MVK': 0.0, 'HCHO': 0.0, 'HAC': 0.0, 'GLYC': 0.0, 'MGLY': 0.0, 'MACR': 0.0, 'OH': 0.0, 'NO': 0.0, 'NO2': 0.0, 'O3': 0.0, 'HO2': 0.0, 'CH3OO': 0.0, 'CH3CO3': 0.0}, {'ISOP1OH23O4OHt': 0.0, 'ISOP1OH23O4OHc': 0.0, 'ISOP1OH2OH34O': 0.0, 'MVK': 0.0, 'HCHO': 0.0, 'HAC': 0.0, 'GLYC': 0.0, 'MGLY': 0.0, 'MACR': 0.0, 'OH': 0.0, 'NO': 0.0, 'NO2': 0.0, 'O3': 0.0, 'HO2': 0.0, 'CH3OO': 0.0, 'CH3CO3': 0.0}, {'ISOP1OH23O4OHt': 0.0, 'ISOP1OH23O4OHc': 0.0, 'ISOP1OH2OH34O': 0.0, 'MVK': 0.0, 'HCHO': 0.0, 'HAC': 0.0, 'GLYC': 0.0, 'MGLY': 0.0, 'MACR': 0.0, 'OH': 0.0, 'NO': 0.0, 'NO2': 0.0, 'O3': 0.0, 'HO2': 0.0, 'CH3OO': 0.0, 'CH3CO3': 0.0}, {'ISOP1OH23O4OHt': 0.0, 'ISOP1OH23O4OHc': 0.0, 'ISOP1OH2OH34O': 0.0, 'MVK': 0.0, 'HCHO': 0.0, 'HAC': 0.0, 'GLYC': 0.0, 'MGLY': 0.0, 'MACR': 0.0, 'OH': 0.0, 'NO': 0.0, 'NO2': 0.0, 'O3': 0.0, 'HO2': 0.0, 'CH3OO': 0.0, 'CH3CO3': 0.0}, {'ISOP1OH23O4OHt': 0.0, 'ISOP1OH23O4OHc': 0.0, 'ISOP1OH2OH34O': 0.0, 'MVK': 0.0, 'HCHO': 0.0, 'HAC': 0.0, 'GLYC': 0.0, 'MGLY': 0.0, 'MACR': 0.0, 'OH': 0.0, 'NO': 0.0, 'NO2': 0.0, 'O3': 0.0, 'HO2': 0.0, 'CH3OO': 0.0, 'CH3CO3': 0.0}, {'ISOP1OH23O4OHt': 0.0, 'ISOP1OH23O4OHc': 0.0, 'ISOP1OH2OH34O': 0.0, 'MVK': 0.0, 'HCHO': 0.0, 'HAC': 0.0, 'GLYC': 0.0, 'MGLY': 0.0, 'MACR': 0.0, 'OH': 0.0, 'NO': 0.0, 'NO2': 0.0, 'O3': 0.0, 'HO2': 0.0, 'CH3OO': 0.0, 'CH3CO3': 0.0}]
+  empty_matrix_0 = {n:0 for n in matrix_keys}
+  empty_matrix = [empty_matrix_0,empty_matrix_0,empty_matrix_0,empty_matrix_0,empty_matrix_0,empty_matrix_0]
   matrix_len = len(input_conditions)
   tick = time.time()
   avg_yield_change_list = [] # a list of how much the yield changed for each molecule from the initial yield
   yield_change_list_3d = [] # a 3d dictionary of the yields for each molecule (not the change in yield, just the raw yield) in each condition for each species
 
+  if ignore_coeffs == "isop_ones":
+    ignore_coeffs = []
+    for j in range(len(new_prod_coeffs)):
+      ignore_coeffs.append([])
+      for k in range(len(new_prod_coeffs[j])):
+        if "isop" in prod_list_n_r[j][k].lower() or new_prod_coeffs[j][k] == 1.0:
+          ignore_coeffs[j].append(0)
+        else:
+          ignore_coeffs[j].append(1)
+  elif ignore_coeffs == "isop":
+    ignore_coeffs = []
+    for j in range(len(new_prod_coeffs)):
+      ignore_coeffs.append([])
+      for k in range(len(new_prod_coeffs[j])):
+        if "isop" in prod_list_n_r[j][k].lower():
+          ignore_coeffs[j].append(0)
+        else:
+          ignore_coeffs[j].append(1)
+  elif ignore_coeffs == "ones":
+    ignore_coeffs = []
+    for j in range(len(new_prod_coeffs)):
+      ignore_coeffs.append([])
+      for k in range(len(new_prod_coeffs[j])):
+        if new_prod_coeffs[j][k] == 1.0:
+          ignore_coeffs[j].append(0)
+        else:
+          ignore_coeffs[j].append(1)
+  elif ignore_coeffs == "nothing":
+    ignore_coeffs = []
+    for j in range(len(new_prod_coeffs)):
+      ignore_coeffs.append([])
+      for k in range(len(new_prod_coeffs[j])):
+        ignore_coeffs[j].append(1)
+  
+
   # for j in range(22):
   for j in range(len(new_prod_coeffs)):
     for k in range(len(new_prod_coeffs[j])):
-      if new_prod_coeffs[j][k] != 1.0:
+      # if new_prod_coeffs[j][k] != 1.0:
+      if ignore_coeffs[j][k] == 1:
+        print("analyzing", prod_list_n_r[j][k], new_prod_coeffs[j][k])
         new_matrix = deepcopy(empty_matrix)
 
         # calculate the ammount to increase the coefficient by and add that to it
@@ -2038,13 +2230,14 @@ def find_yield_change():
         # reduce the coefficient back to its original value
         new_prod_coeffs[j][k] = new_prod_coeffs[j][k] - increase
       else:
+        print("not analyzing", prod_list_n_r[j][k], new_prod_coeffs[j][k])
         avg_yield_change_list.append(0)
         yield_change_list_3d.append(empty_matrix)
   tock = time.time()
   print("Sensitivity analysis complete")
   return yield_change_list_3d, avg_yield_change_list
 
-yield_change_list_3d, avg_yield_change_list = find_yield_change()
+yield_change_list_3d, avg_yield_change_list = find_yield_change(ignore_coeffs)
 pickle_yield_change_list_3d = yield_change_list_3d
 
 """### 4. Optimization Graph (Import 4 needed)
@@ -2070,7 +2263,7 @@ def make_map():
 
 def make_graph():
   max_coeff = 0
-  matrix_keys = ['ISOP1OH23O4OHt', 'ISOP1OH23O4OHc', 'ISOP1OH2OH34O', 'MVK', 'HCHO', 'HAC', 'GLYC', 'MGLY', 'MACR', 'OH', 'NO', 'NO2', 'O3', 'HO2', 'CH3OO', 'CH3CO3']
+
   for i in range(len(pickle_yield_change_list_3d)):
     for j in range(len(pickle_yield_change_list_3d[i])):
       for key in matrix_keys:
@@ -2086,7 +2279,7 @@ def make_graph():
   low_counter = 0
   coeff_counter = 0
   negligible_counter = 0
-  matrix_keys = ['ISOP1OH23O4OHt', 'ISOP1OH23O4OHc', 'ISOP1OH2OH34O', 'MVK', 'HCHO', 'HAC', 'GLYC', 'MGLY', 'MACR', 'OH', 'NO', 'NO2', 'O3', 'HO2', 'CH3OO', 'CH3CO3']
+
   for i in range(len(pickle_yield_change_list_3d)):
     mark = False
     for j in range(len(pickle_yield_change_list_3d[i])):
@@ -2193,5 +2386,4 @@ individual_coeff_map = make_individual_map()
 
 new_prod_coeffs = copy_prod()
 avg_score, score_matrix = evaluate(new_prod_coeffs)
-
 print("Initial Score:", avg_score)
